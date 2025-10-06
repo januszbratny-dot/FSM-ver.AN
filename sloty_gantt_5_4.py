@@ -311,41 +311,6 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
     if save:
         save_state_to_json()
 
-def recalculate_arrival_windows():
-    """Przelicza wszystkie przedziały przyjazdu dla istniejących slotów."""
-    for brygada, days in st.session_state.schedules.items():
-        for d, slots in days.items():
-            for s in slots:
-                if "start" not in s or not s["start"]:
-                    continue
-                try:
-                    czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 90))
-                    czas_po = int(st.session_state.get("czas_rezerwowy_po", 90))
-                except Exception:
-                    czas_przed = 90
-                    czas_po = 90
-
-                day_date = datetime.strptime(d, "%Y-%m-%d").date()
-                wh_start, wh_end = st.session_state.working_hours.get(brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END))
-                wh_start_dt = datetime.combine(day_date, wh_start)
-                wh_end_dt = datetime.combine(day_date, wh_end)
-                if wh_end_dt <= wh_start_dt:  # dla nocnych zmian
-                    wh_end_dt += timedelta(days=1)
-
-                przyjazd_start = s["start"] - timedelta(minutes=czas_przed)
-                przyjazd_end = s["start"] + timedelta(minutes=czas_po)
-
-                # Dopasuj do godzin pracy
-                if przyjazd_start < wh_start_dt:
-                    przyjazd_start = wh_start_dt
-                    przyjazd_end = przyjazd_start + timedelta(minutes=czas_przed + czas_po)
-                if przyjazd_end > wh_end_dt:
-                    przyjazd_end = wh_end_dt
-                    przyjazd_start = przyjazd_end - timedelta(minutes=czas_przed + czas_po)
-
-                s["arrival_window_start"] = przyjazd_start
-                s["arrival_window_end"] = przyjazd_end
-
 
 def delete_slot(brygada: str, day_str: str, slot_id: str):
     st.session_state.schedules.setdefault(brygada, {})
