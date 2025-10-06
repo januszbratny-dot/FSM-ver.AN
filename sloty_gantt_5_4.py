@@ -639,30 +639,15 @@ if not available_slots:
 else:
     for i, s in enumerate(available_slots):
         col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-
-        # Wyświetl godzinę slotu
         col1.write(f"🕐 {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
-
-        # Wyświetl dostępne brygady
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
-
-        # Oblicz przedział przyjazdu i dopasuj do godzin pracy brygady
+        # oblicz arrival window na podstawie ustawień w session_state
         czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
         czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
-        brygada = s['brygady'][0]
-        wh_start, wh_end = st.session_state.working_hours.get(brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END))
-        wh_start_dt = datetime.combine(booking_day, wh_start)
-        wh_end_dt = datetime.combine(booking_day, wh_end)
-        if wh_end_dt <= wh_start_dt:
-            wh_end_dt += timedelta(days=1)
-
-        arrival_start = max(s['start'] - timedelta(minutes=czas_przed), wh_start_dt)
-        arrival_end = min(s['end'] + timedelta(minutes=czas_po), wh_end_dt)
-
+        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
-
-        # Przycisk rezerwacji slotu
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
+            brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
                 "end": s["end"],
