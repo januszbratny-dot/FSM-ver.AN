@@ -440,9 +440,9 @@ booking_day = st.session_state.booking_day
 
 st.write("=== DEBUG SLOTS ===")
 st.write("📅 Working hours:", st.session_state.get("working_hours"))
-st.write("⏱️ slot_minutes =", slot_minutes)
+st.write("⏱️ slot_minutes =", minutes)
 st.write("📆 day =", day)
-slots_debug = get_available_slots_for_day(day, slot_minutes)
+slots_debug = get_available_slots_for_day(day, minutes)
 st.write("🔍 Wynik funkcji get_available_slots_for_day:", slots_debug)
 st.write("===================")
 
@@ -748,7 +748,7 @@ if os.environ.get("RUN_SCHEDULE_TESTS"):
 
 st.write("📅 Working hours:", st.session_state.get("working_hours"))
 
-st.write("⏱️ slot_minutes =", slot_minutes)
+st.write("⏱️ slot_minutes =", minutes)
 
 st.write("📆 day =", day)
 
