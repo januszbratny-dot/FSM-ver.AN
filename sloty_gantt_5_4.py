@@ -440,7 +440,7 @@ booking_day = st.session_state.booking_day
 
 st.write("=== DEBUG SLOTS ===")
 st.write("📅 Working hours:", st.session_state.get("working_hours"))
-st.write("⏱️ slot_minutes =", minutes)
+#st.write("⏱️ slot_minutes =", minutes)
 st.write("📆 day =", day)
 slots_debug = get_available_slots_for_day(day, minutes)
 st.write("🔍 Wynik funkcji get_available_slots_for_day:", slots_debug)
