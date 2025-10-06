@@ -222,17 +222,18 @@ def weighted_choice(slot_types: List[Dict]) -> Optional[str]:
 
 # ---------------------- ARRIVAL WINDOW HELPERS ----------------------
 
-def oblicz_przedzial_przyjazdu(start_time: datetime,
-                               czas_rezerwowy_przed: int,
-                               czas_rezerwowy_po: int) -> Tuple[datetime, datetime]:
-    """
-    Zwraca przedział czasowy przyjazdu brygady do klienta.
-    start_time – czas rozpoczęcia głównego slotu
-    czas_rezerwowy_przed/po – minuty
-    """
+def oblicz_przedzial_przyjazdu(start_time, work_start, work_end, czas_rezerwowy_przed, czas_rezerwowy_po):
     przyjazd_start = start_time - timedelta(minutes=czas_rezerwowy_przed)
     przyjazd_end = start_time + timedelta(minutes=czas_rezerwowy_po)
+
+    # Przycinanie do godzin pracy brygady
+    if przyjazd_start < work_start:
+        przyjazd_start = work_start
+    if przyjazd_end > work_end:
+        przyjazd_end = work_end
+
     return przyjazd_start, przyjazd_end
+
 
 # ---------------------- SCHEDULE MANAGEMENT ----------------------
 
