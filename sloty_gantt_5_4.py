@@ -137,9 +137,70 @@ if "buffer_after" not in st.session_state:
 
 # ---------------------- SIDEBAR ----------------------
 with st.sidebar:
+    st.subheader("⚙️ Konfiguracja")
+
+    # slot types editor with validation
+    txt = st.text_area("Typy slotów (format: Nazwa, minuty, waga)",
+                       value="\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types))
+    parsed = []
+    for i, line in enumerate(txt.splitlines(), 1):
+        raw = line.strip()
+        if not raw:
+            continue
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        try:
+            name = parts[0]
+            minutes = int(parts[1]) if len(parts) > 1 else None
+            weight = float(parts[2]) if len(parts) > 2 else 1.0
+            if minutes is None or minutes <= 0:
+                raise ValueError("minutes must be > 0")
+            parsed.append({"name": name, "minutes": minutes, "weight": weight})
+        except Exception as e:
+            st.warning(f"Linia {i} pominieta w 'Typy slotów': {e}")
+    if parsed:
+        st.session_state.slot_types = parsed
+
+    # brygady editor
+    txt_b = st.text_area("Lista brygad", value="\n".join(st.session_state.brygady))
+    brygady_new = [line.strip() for line in txt_b.splitlines() if line.strip()]
+    if brygady_new and brygady_new != st.session_state.brygady:
+        st.session_state.brygady = brygady_new
+
+    # Godziny pracy brygad
+    st.markdown("---")
+    st.write("Godziny pracy (edytowalne dla każdej brygady)")
+    for i, b in enumerate(st.session_state.brygady):
+        start_t = st.time_input(f"Start {b}", value=st.session_state.working_hours.get(b,(DEFAULT_WORK_START,DEFAULT_WORK_END))[0], key=f"wh_start_{i}")
+        end_t = st.time_input(f"Koniec {b}", value=st.session_state.working_hours.get(b,(DEFAULT_WORK_START,DEFAULT_WORK_END))[1], key=f"wh_end_{i}")
+        st.session_state.working_hours[b] = (start_t, end_t)
+
+    st.markdown("---")
+    # bufory przyjazdu Brygady
     st.subheader("⏱ Bufory przyjazdu Brygady")
-    st.session_state.buffer_before = st.number_input("Czas rezerwowy przed [min]", min_value=0, max_value=120, value=st.session_state.buffer_before, step=5)
-    st.session_state.buffer_after = st.number_input("Czas rezerwowy po [min]", min_value=0, max_value=120, value=st.session_state.buffer_after, step=5)
+    st.session_state.buffer_before = st.number_input("Czas rezerwowy przed [min]", min_value=0, max_value=120, value=st.session_state.get("buffer_before",15), step=5)
+    st.session_state.buffer_after = st.number_input("Czas rezerwowy po [min]", min_value=0, max_value=120, value=st.session_state.get("buffer_after",15), step=5)
+
+    st.markdown("---")
+    if st.button("🗑️ Wyczyść harmonogram"):
+        st.session_state.schedules = {b:{} for b in st.session_state.brygady}
+        st.session_state.clients_added = []
+        st.session_state.client_counter = 1
+        st.session_state.not_found_counter = 0
+        save_state_to_json()
+        st.success("Harmonogram wyczyszczony.")
+
+    # Nawigacja tygodniowa
+    st.subheader("⬅️ Wybór tygodnia")
+    if "week_offset" not in st.session_state:
+        st.session_state.week_offset = 0
+    col1, col2 = st.columns(2)
+    if col1.button("‹ Poprzedni tydzień"):
+        st.session_state.week_offset -= 1
+    if col2.button("Następny tydzień ›"):
+        st.session_state.week_offset += 1
+    week_ref = date.today() + timedelta(weeks=st.session_state.week_offset)
+    week_days = [week_ref - timedelta(days=week_ref.weekday()) + timedelta(days=i) for i in range(7)]
+    st.write(f"Tydzień: {week_days[0].strftime('%d-%m-%Y')} – {week_days[-1].strftime('%d-%m-%Y')}")
 
 # ---------------------- UI ----------------------
 st.set_page_config(page_title="Harmonogram slotów", layout="wide")
