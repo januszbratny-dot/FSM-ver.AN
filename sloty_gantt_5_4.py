@@ -8,6 +8,22 @@ import pandas as pd
 import plotly.express as px
 from loguru import logger
 
+STATE_FILE = "fsm_state.json"  # lub "state.json", jeśli używasz innej nazwy
+
+st.sidebar.markdown("### 🔧 Ustawienia aplikacji")
+
+if st.sidebar.button("🗑️ Resetuj dane (usuń plik JSON)"):
+    try:
+        if os.path.exists(STATE_FILE):
+            os.remove(STATE_FILE)
+            st.sidebar.success("Plik stanu został usunięty.")
+        else:
+            st.sidebar.info("Plik już nie istnieje.")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Nie udało się usunąć pliku: {e}")
+
+
 STATE_FILE = "schedules.json"
 
 # --- Pomocnicze funkcje czasu ---
