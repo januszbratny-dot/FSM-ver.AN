@@ -738,9 +738,16 @@ def _run_basic_tests():
 if os.environ.get("RUN_SCHEDULE_TESTS"):
     _run_basic_tests()
 
+
+# ---------------------- DEBUG INFO ----------------------
+st.markdown("---")
+st.subheader("🧩 Debug info")
+
 st.write("📅 Working hours:", st.session_state.get("working_hours"))
+st.write("⏱️ slot_minutes =", slot_type["minutes"])
+st.write("📆 booking_day =", booking_day)
 
-st.write("⏱️ slot_minutes =", minutes)
+debug_slots = get_available_slots_for_day(booking_day, slot_type["minutes"])
+st.write("🔍 Dostępne sloty (debug):", debug_slots)
 
-st.write("📆 day =", day)
 
