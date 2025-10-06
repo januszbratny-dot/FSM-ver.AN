@@ -438,6 +438,15 @@ with col_mid:
 
 booking_day = st.session_state.booking_day
 
+st.write("=== DEBUG SLOTS ===")
+st.write("📅 Working hours:", st.session_state.get("working_hours"))
+st.write("⏱️ slot_minutes =", slot_minutes)
+st.write("📆 day =", day)
+slots_debug = get_available_slots_for_day(day, slot_minutes)
+st.write("🔍 Wynik funkcji get_available_slots_for_day:", slots_debug)
+st.write("===================")
+
+
 # funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
 # funkcja do generowania dostępnych slotów bez podziału na brygady
 def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
