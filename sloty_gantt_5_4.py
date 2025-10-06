@@ -349,6 +349,104 @@ def get_week_days(reference_day: date) -> List[date]:
     return [monday + timedelta(days=i) for i in range(7)]
 
 
+# funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
+# funkcja do generowania dostępnych slotów bez podziału na brygady
+def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
+    """Zwraca sloty, które można przydzielić na początku/końcu dnia pracy
+    lub które bezpośrednio sąsiadują z już zarezerwowanymi slotami."""
+
+    available_slots = []
+
+    for brygada, working_hours in st.session_state.working_hours.items():
+        wh_start, wh_end = working_hours
+        wh_start_dt = datetime.combine(day, wh_start)
+        wh_end_dt = datetime.combine(day, wh_end)
+        if wh_end_dt <= wh_start_dt:
+            wh_end_dt += timedelta(days=1)
+
+        slots = get_day_slots_for_brygada(brygada, day)
+        used_intervals = [(s["start"], s["end"]) for s in slots]
+        candidates = []
+
+        if not used_intervals:
+            # Brak rezerwacji -> pokaż początek i koniec dnia pracy
+            start_dt = wh_start_dt
+            end_dt = start_dt + timedelta(minutes=slot_minutes)
+            if end_dt <= wh_end_dt:
+                candidates.append((start_dt, end_dt))
+
+            end_dt = wh_end_dt
+            start_dt = end_dt - timedelta(minutes=slot_minutes)
+            if start_dt >= wh_start_dt:
+                candidates.append((start_dt, end_dt))
+        else:
+            # Sloty przylegające
+            for s in used_intervals:
+                # Slot przed istniejącym
+                before_end = s[0]
+                before_start = before_end - timedelta(minutes=slot_minutes)
+                if before_start >= wh_start_dt:
+                    candidates.append((before_start, before_end))
+
+                # Slot po istniejącym
+                after_start = s[1]
+                after_end = after_start + timedelta(minutes=slot_minutes)
+                if after_end <= wh_end_dt:
+                    candidates.append((after_start, after_end))
+
+            # Brzegowe – jeśli pierwszy slot nie sięga początku pracy
+            first_slot_start = min(s[0] for s in used_intervals)
+            if first_slot_start > wh_start_dt:
+                start_dt = wh_start_dt
+                end_dt = start_dt + timedelta(minutes=slot_minutes)
+                if end_dt <= first_slot_start:
+                    candidates.append((start_dt, end_dt))
+
+            # Brzegowe – jeśli ostatni slot nie sięga końca pracy
+            last_slot_end = max(s[1] for s in used_intervals)
+            if last_slot_end < wh_end_dt:
+                end_dt = wh_end_dt
+                start_dt = end_dt - timedelta(minutes=slot_minutes)
+                if start_dt >= last_slot_end:
+                    candidates.append((start_dt, end_dt))
+
+        # Filtr kolizji (dla pewności)
+        valid = []
+        for c_start, c_end in candidates:
+            overlaps = any(
+                not (c_end <= u_start or c_start >= u_end)
+                for u_start, u_end in used_intervals
+            )
+            if not overlaps:
+                valid.append((c_start, c_end))
+
+        # Dodaj sloty do listy
+        for start_dt, end_dt in sorted(set(valid)):
+            available_slots.append({
+                "brygada": brygada,
+                "start": start_dt,
+                "end": end_dt,
+                "slot_type": None
+            })
+
+    # Agregacja duplikatów między brygadami
+    grouped = {}
+    for s in available_slots:
+        key = (s["start"], s["end"])
+        grouped.setdefault(key, []).append(s["brygada"])
+
+    result = []
+    for (start_dt, end_dt), brygady in grouped.items():
+        result.append({
+            "start": start_dt,
+            "end": end_dt,
+            "brygady": brygady
+        })
+
+    result.sort(key=lambda x: x["start"])
+    logging.info(f"DEBUG: get_available_slots_for_day({day}) -> {len(result)} slots")
+    return result
+
 # ---------------------- UI ----------------------
 st.set_page_config(page_title="Harmonogram slotów", layout="wide")
 st.title("📅 Harmonogram slotów - Tydzień")
@@ -464,106 +562,6 @@ else:
             st.session_state.client_counter += 1
             st.success(f"✅ Zarezerwowano slot {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} w brygadzie {brygada}.")
             st.rerun()
-
-# funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
-# funkcja do generowania dostępnych slotów bez podziału na brygady
-def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
-    """Zwraca sloty, które można przydzielić na początku/końcu dnia pracy
-    lub które bezpośrednio sąsiadują z już zarezerwowanymi slotami."""
-
-    available_slots = []
-
-    for brygada, working_hours in st.session_state.working_hours.items():
-        wh_start, wh_end = working_hours
-        wh_start_dt = datetime.combine(day, wh_start)
-        wh_end_dt = datetime.combine(day, wh_end)
-        if wh_end_dt <= wh_start_dt:
-            wh_end_dt += timedelta(days=1)
-
-        slots = get_day_slots_for_brygada(brygada, day)
-        used_intervals = [(s["start"], s["end"]) for s in slots]
-        candidates = []
-
-        if not used_intervals:
-            # Brak rezerwacji -> pokaż początek i koniec dnia pracy
-            start_dt = wh_start_dt
-            end_dt = start_dt + timedelta(minutes=slot_minutes)
-            if end_dt <= wh_end_dt:
-                candidates.append((start_dt, end_dt))
-
-            end_dt = wh_end_dt
-            start_dt = end_dt - timedelta(minutes=slot_minutes)
-            if start_dt >= wh_start_dt:
-                candidates.append((start_dt, end_dt))
-        else:
-            # Sloty przylegające
-            for s in used_intervals:
-                # Slot przed istniejącym
-                before_end = s[0]
-                before_start = before_end - timedelta(minutes=slot_minutes)
-                if before_start >= wh_start_dt:
-                    candidates.append((before_start, before_end))
-
-                # Slot po istniejącym
-                after_start = s[1]
-                after_end = after_start + timedelta(minutes=slot_minutes)
-                if after_end <= wh_end_dt:
-                    candidates.append((after_start, after_end))
-
-            # Brzegowe – jeśli pierwszy slot nie sięga początku pracy
-            first_slot_start = min(s[0] for s in used_intervals)
-            if first_slot_start > wh_start_dt:
-                start_dt = wh_start_dt
-                end_dt = start_dt + timedelta(minutes=slot_minutes)
-                if end_dt <= first_slot_start:
-                    candidates.append((start_dt, end_dt))
-
-            # Brzegowe – jeśli ostatni slot nie sięga końca pracy
-            last_slot_end = max(s[1] for s in used_intervals)
-            if last_slot_end < wh_end_dt:
-                end_dt = wh_end_dt
-                start_dt = end_dt - timedelta(minutes=slot_minutes)
-                if start_dt >= last_slot_end:
-                    candidates.append((start_dt, end_dt))
-
-        # Filtr kolizji (dla pewności)
-        valid = []
-        for c_start, c_end in candidates:
-            overlaps = any(
-                not (c_end <= u_start or c_start >= u_end)
-                for u_start, u_end in used_intervals
-            )
-            if not overlaps:
-                valid.append((c_start, c_end))
-
-        # Dodaj sloty do listy
-        for start_dt, end_dt in sorted(set(valid)):
-            available_slots.append({
-                "brygada": brygada,
-                "start": start_dt,
-                "end": end_dt,
-                "slot_type": None
-            })
-
-    # Agregacja duplikatów między brygadami
-    grouped = {}
-    for s in available_slots:
-        key = (s["start"], s["end"])
-        grouped.setdefault(key, []).append(s["brygada"])
-
-    result = []
-    for (start_dt, end_dt), brygady in grouped.items():
-        result.append({
-            "start": start_dt,
-            "end": end_dt,
-            "brygady": brygady
-        })
-
-    result.sort(key=lambda x: x["start"])
-    logging.info(f"DEBUG: get_available_slots_for_day({day}) -> {len(result)} slots")
-    return result
-
-
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
 st.subheader("⚡ Automatyczne dociążenie wszystkich brygad")
