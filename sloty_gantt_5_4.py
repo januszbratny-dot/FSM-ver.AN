@@ -231,7 +231,7 @@ def oblicz_przedzial_przyjazdu(start_time: datetime,
     czas_rezerwowy_przed/po – minuty
     """
     przyjazd_start = start_time - timedelta(minutes=czas_rezerwowy_przed)
-    przyjazd_end = start_time - timedelta(minutes=czas_rezerwowy_po)
+    przyjazd_end = start_time + timedelta(minutes=czas_rezerwowy_po)
     return przyjazd_start, przyjazd_end
 
 # ---------------------- SCHEDULE MANAGEMENT ----------------------
