@@ -254,8 +254,8 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
 
     # Dodaj pola dla przedziału przyjazdu (jeśli start istnieje)
     try:
-        czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
-        czas_po = int(st.session_state.get("czas_rezerwowy_po", 10))
+        czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 90))
+        czas_po = int(st.session_state.get("czas_rezerwowy_po", 90))
     except Exception:
         czas_przed = 90
         czas_po = 90
@@ -533,10 +533,10 @@ with st.sidebar:
     st.subheader("🕓 Czas rezerwowy (przyjazd Brygady)")
     st.write("Ustaw w minutach: przed i po czasie rozpoczęcia slotu.")
     st.session_state.czas_rezerwowy_przed = st.number_input(
-        "Czas rezerwowy przed (minuty)", min_value=0, max_value=180, value=30, step=5, key="czas_przed"
+        "Czas rezerwowy przed (minuty)", min_value=0, max_value=180, value=90, step=5, key="czas_przed"
     )
     st.session_state.czas_rezerwowy_po = st.number_input(
-        "Czas rezerwowy po (minuty)", min_value=0, max_value=180, value=10, step=5, key="czas_po"
+        "Czas rezerwowy po (minuty)", min_value=0, max_value=180, value=90, step=5, key="czas_po"
     )
 
 # week navigation
@@ -604,8 +604,8 @@ else:
         col1.write(f"🕐 {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
         # oblicz arrival window na podstawie ustawień w session_state
-        czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 30))
-        czas_po = int(st.session_state.get('czas_rezerwowy_po', 10))
+        czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
+        czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
         arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
