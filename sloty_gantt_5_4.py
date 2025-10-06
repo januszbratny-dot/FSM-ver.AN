@@ -645,7 +645,7 @@ else:
         # oblicz arrival window na podstawie ustawień w session_state
         czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
         czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
-        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], work_start, work_end, czas_rezerwowy_przed, czas_rezerwowy_po))
+        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], work_start, work_end, czas_rezerwowy_przed, czas_rezerwowy_po)
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
