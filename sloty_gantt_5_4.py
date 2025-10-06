@@ -1,4 +1,3 @@
-import uuid
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,6 +6,7 @@ import os
 import json
 import tempfile
 import logging
+import uuid
 from datetime import datetime, timedelta, date, time
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Tuple, Optional
@@ -38,7 +38,9 @@ class Slot:
 
 # ---------------------- HELPERS: SERIALIZATION ----------------------
 
-def _datetime_to_iso(dt: datetime) -> str:
+def _datetime_to_iso(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
     return dt.isoformat()
 
 
@@ -46,8 +48,10 @@ def _time_to_iso(t: time) -> str:
     return t.isoformat()
 
 
-def parse_datetime_iso(s: str) -> datetime:
+def parse_datetime_iso(s: Optional[str]) -> Optional[datetime]:
     """Parse ISO datetimes; support trailing 'Z' by converting to +00:00."""
+    if s is None:
+        return None
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
     return datetime.fromisoformat(s)
@@ -66,7 +70,6 @@ def parse_time_str(t: str) -> time:
                 continue
     raise ValueError(f"Nie można sparsować czasu: {t}")
 
-
 # ---------------------- PERSISTENCE ----------------------
 
 def schedules_to_jsonable() -> Dict:
@@ -77,12 +80,15 @@ def schedules_to_jsonable() -> Dict:
         for d, slots in days.items():
             data[b][d] = [
                 {
+                    "id": s.get("id"),
                     "start": _datetime_to_iso(s["start"]),
                     "end": _datetime_to_iso(s["end"]),
                     "slot_type": s["slot_type"],
                     "duration_min": s["duration_min"],
                     "client": s["client"],
                     "pref_range": s.get("pref_range", None),
+                    "arrival_window_start": _datetime_to_iso(s.get("arrival_window_start")),
+                    "arrival_window_end": _datetime_to_iso(s.get("arrival_window_end")),
                 }
                 for s in slots
             ]
@@ -136,12 +142,15 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
         for d, slots in days.items():
             st.session_state.schedules[b][d] = [
                 {
-                    "start": parse_datetime_iso(s["start"]),
-                    "end": parse_datetime_iso(s["end"]),
-                    "slot_type": s["slot_type"],
-                    "duration_min": s["duration_min"],
-                    "client": s["client"],
+                    "id": s.get("id", str(uuid.uuid4())),
+                    "start": parse_datetime_iso(s.get("start")),
+                    "end": parse_datetime_iso(s.get("end")),
+                    "slot_type": s.get("slot_type"),
+                    "duration_min": s.get("duration_min"),
+                    "client": s.get("client"),
                     "pref_range": s.get("pref_range", None),
+                    "arrival_window_start": parse_datetime_iso(s.get("arrival_window_start")),
+                    "arrival_window_end": parse_datetime_iso(s.get("arrival_window_end")),
                 }
                 for s in slots
             ]
@@ -152,7 +161,6 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
     st.session_state.not_found_counter = data.get("not_found_counter", 0)
     logger.info(f"State loaded from {filename}")
     return True
-
 
 # ---------------------- INITIALIZATION ----------------------
 
@@ -181,7 +189,6 @@ def ensure_brygady_in_state(brygady_list: List[str]):
             st.session_state.working_hours[b] = (DEFAULT_WORK_START, DEFAULT_WORK_END)
         if b not in st.session_state.schedules:
             st.session_state.schedules[b] = {}
-
 
 # ---------------------- PARSERS & VALIDATION ----------------------
 
@@ -213,6 +220,19 @@ def weighted_choice(slot_types: List[Dict]) -> Optional[str]:
     weights = [s.get("weight", 1) for s in slot_types]
     return random.choices(names, weights=weights, k=1)[0]
 
+# ---------------------- ARRIVAL WINDOW HELPERS ----------------------
+
+def oblicz_przedzial_przyjazdu(start_time: datetime,
+                               czas_rezerwowy_przed: int,
+                               czas_rezerwowy_po: int) -> Tuple[datetime, datetime]:
+    """
+    Zwraca przedział czasowy przyjazdu brygady do klienta.
+    start_time – czas rozpoczęcia głównego slotu
+    czas_rezerwowy_przed/po – minuty
+    """
+    przyjazd_start = start_time - timedelta(minutes=czas_rezerwowy_przed)
+    przyjazd_end = start_time - timedelta(minutes=czas_rezerwowy_po)
+    return przyjazd_start, przyjazd_end
 
 # ---------------------- SCHEDULE MANAGEMENT ----------------------
 
@@ -231,22 +251,38 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         st.session_state.schedules[brygada] = {}
     if d not in st.session_state.schedules[brygada]:
         st.session_state.schedules[brygada][d] = []
+
+    # Dodaj pola dla przedziału przyjazdu (jeśli start istnieje)
+    try:
+        czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
+        czas_po = int(st.session_state.get("czas_rezerwowy_po", 10))
+    except Exception:
+        czas_przed = 30
+        czas_po = 10
+
+    if "start" in s and s["start"]:
+        przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(s["start"], czas_przed, czas_po)
+        s["arrival_window_start"] = przyjazd_start
+        s["arrival_window_end"] = przyjazd_end
+    else:
+        s["arrival_window_start"] = None
+        s["arrival_window_end"] = None
+
     st.session_state.schedules[brygada][d].append(s)
     st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
     if save:
         save_state_to_json()
 
 
-
-def delete_slot(brygada: str, day_str: str, start_iso: str):
+def delete_slot(brygada: str, day_str: str, slot_id: str):
     st.session_state.schedules.setdefault(brygada, {})
     slots = st.session_state.schedules[brygada].get(day_str, [])
     before = len(slots)
-    st.session_state.schedules[brygada][day_str] = [s for s in slots if s["start"].isoformat() != start_iso]
+    st.session_state.schedules[brygada][day_str] = [s for s in slots if s.get("id") != slot_id]
     after = len(st.session_state.schedules[brygada][day_str])
     if before != after:
         save_state_to_json()
-        logger.info(f"Deleted slot {start_iso} on {brygada} {day_str}")
+        logger.info(f"Deleted slot {slot_id} on {brygada} {day_str}")
 
 
 def _wh_minutes(wh_start: time, wh_end: time) -> int:
@@ -258,7 +294,8 @@ def _wh_minutes(wh_start: time, wh_end: time) -> int:
     return int((end_dt - start_dt).total_seconds() // 60)
 
 
-def schedule_client_immediately(client_name: str, slot_type_name: str, day: date, pref_start: time, pref_end: time) -> Tuple[bool, Optional[Dict]]:
+def schedule_client_immediately(client_name: str, slot_type_name: str, day: date,
+                                pref_start: time, pref_end: time, save: bool = True) -> Tuple[bool, Optional[Dict]]:
     """
     Znajduje najlepszy możliwy termin dla klienta w danym dniu, preferując:
     1. Sloty mieszczące się w preferencjach klienta,
@@ -330,6 +367,7 @@ def schedule_client_immediately(client_name: str, slot_type_name: str, day: date
     brygada, start, end, _, _, _ = candidates[0]
 
     slot = {
+        "id": str(uuid.uuid4()),
         "start": start,
         "end": end,
         "slot_type": slot_type_name,
@@ -337,9 +375,11 @@ def schedule_client_immediately(client_name: str, slot_type_name: str, day: date
         "client": client_name,
     }
 
-    add_slot_to_brygada(brygada, day, slot)
-    return True, slot
-
+    add_slot_to_brygada(brygada, day, slot, save=save)
+    # zwracamy informację o tym, do której brygady przydzielono slot
+    slot_with_meta = dict(slot)
+    slot_with_meta["brygada"] = brygada
+    return True, slot_with_meta
 
 # ---------------------- PREDEFINED SLOTS & UTIL ----------------------
 PREFERRED_SLOTS = {
@@ -355,8 +395,6 @@ def get_week_days(reference_day: date) -> List[date]:
     return [monday + timedelta(days=i) for i in range(7)]
 
 
-# funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
-# funkcja do generowania dostępnych slotów bez podziału na brygady
 def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
     """Zwraca sloty, które można przydzielić na początku/końcu dnia pracy
     lub które bezpośrednio sąsiadują z już zarezerwowanymi slotami."""
@@ -491,6 +529,16 @@ with st.sidebar:
         save_state_to_json()
         st.success("Harmonogram wyczyszczony.")
 
+    # Arrival window settings
+    st.subheader("🕓 Czas rezerwowy (przyjazd Brygady)")
+    st.write("Ustaw w minutach: przed i po czasie rozpoczęcia slotu.")
+    st.session_state.czas_rezerwowy_przed = st.number_input(
+        "Czas rezerwowy przed (minuty)", min_value=0, max_value=180, value=30, step=5, key="czas_przed"
+    )
+    st.session_state.czas_rezerwowy_po = st.number_input(
+        "Czas rezerwowy po (minuty)", min_value=0, max_value=180, value=10, step=5, key="czas_po"
+    )
+
 # week navigation
 if "week_offset" not in st.session_state:
     st.session_state.week_offset = 0
@@ -552,10 +600,15 @@ if not available_slots:
     st.info("Brak dostępnych slotów dla wybranego dnia.")
 else:
     for i, s in enumerate(available_slots):
-        col1, col2, col3 = st.columns([2, 2, 1])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
         col1.write(f"🕐 {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
-        if col3.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
+        # oblicz arrival window na podstawie ustawień w session_state
+        czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 30))
+        czas_po = int(st.session_state.get('czas_rezerwowy_po', 10))
+        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
+        col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
+        if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
@@ -612,14 +665,16 @@ if st.button("🚀 Wypełnij cały dzień do 100%"):
             client_name = f"AutoKlient {st.session_state.client_counter}"
 
             # próbujemy dodać slot (bez zapisu przy każdym dodaniu dla performance)
-            ok, info = schedule_client_immediately(client_name, auto_type, day_autofill, pref_start, pref_end)
-            if ok:
-                # oznaczenie pref_range w slotach
-                for s in st.session_state.schedules[b][d_str]:
-                    if s["client"] == client_name and s["start"] == info["start"]:
+            ok, info = schedule_client_immediately(client_name, auto_type, day_autofill, pref_start, pref_end, save=False)
+            if ok and info:
+                assigned_b = info["brygada"]
+                d_str = day_autofill.strftime("%Y-%m-%d")
+                # ustaw pref_range w właściwym obiekcie (szukamy po id)
+                for s in st.session_state.schedules[assigned_b][d_str]:
+                    if s.get("id") == info.get("id"):
                         s["pref_range"] = auto_pref_label
+                        break
 
-                # aktualizacja session_state
                 st.session_state.clients_added.append({
                     "client": client_name,
                     "slot_type": auto_type,
@@ -628,6 +683,9 @@ if st.button("🚀 Wypełnij cały dzień do 100%"):
                 st.session_state.client_counter += 1
                 added_total += 1
                 slots_added_in_last_iteration = True
+
+    # po zakończeniu pętli zapisz raz
+    save_state_to_json()
 
     # ustawiamy flagę, która będzie przetworzona w kolejnym renderze
     st.session_state["autofill_done"] = True
@@ -646,7 +704,6 @@ if st.session_state.get("autofill_done"):
     # BEZPIECZNE wywołanie rerun po zakończeniu renderu
     st.rerun()
 
-
 # ---------------------- Harmonogram (tabela) ----------------------
 all_slots = []
 for b in st.session_state.brygady:
@@ -659,11 +716,11 @@ for b in st.session_state.brygady:
                 "Dzień": d_str,
                 "Klient": s["client"],
                 "Typ": s["slot_type"],
-                "Wybrany slot": s.get("pref_range", ""),
+                "Przedział przyjazdu": s.get("arrival_window_start") and s.get("arrival_window_end") and f"{s['arrival_window_start'].strftime('%H:%M')} - {s['arrival_window_end'].strftime('%H:%M')}",
                 "Start": s["start"],
                 "Koniec": s["end"],
                 "Czas [min]": s["duration_min"],
-                "_start_iso": s["start"].isoformat(),
+                "_id": s.get("id", s["start"].isoformat()),
             })
 
 df = pd.DataFrame(all_slots)
@@ -671,25 +728,25 @@ st.subheader("📋 Tabela harmonogramu")
 if df.empty:
     st.info("Brak zaplanowanych slotów w tym tygodniu.")
 else:
-    st.dataframe(df.drop(columns=["_start_iso"]))
+    st.dataframe(df.drop(columns=["_id"]))
 
 # management: delete individual slots
 st.subheader("🧰 Zarządzaj slotami")
 if not df.empty:
     for idx, row in df.iterrows():
-        cols = st.columns([1, 3, 2, 2, 2, 1])
+        cols = st.columns([1.2, 2, 1.2, 2, 1])
         cols[0].write(row["Dzień"])
         cols[1].write(f"**{row['Klient']}** — {row['Typ']}")
         cols[2].write(f"{row['Start'].strftime('%H:%M')} - {row['Koniec'].strftime('%H:%M')}")
-        cols[3].write(row["Brygada"])
-        if cols[4].button("Usuń", key=f"del_{row['Brygada']}_{row['_start_iso']}"):
-            delete_slot(row["Brygada"], row["Dzień"], row["_start_iso"])
+        cols[3].write(row["Przedział przyjazdu"] if row["Przedział przyjazdu"] else "-")
+        if cols[4].button("Usuń", key=f"del_{row['Brygada']}_{row['_id']}"):
+            delete_slot(row["Brygada"], row["Dzień"], row["_id"])
             st.rerun()
 
 # ---------------------- GANTT ----------------------
 if not df.empty:
     st.subheader("📊 Wykres Gantta - tydzień")
-    fig = px.timeline(df, x_start="Start", x_end="Koniec", y="Brygada", color="Klient", hover_data=["Typ", "Wybrany slot"])
+    fig = px.timeline(df, x_start="Start", x_end="Koniec", y="Brygada", color="Klient", hover_data=["Typ", "Przedział przyjazdu"])
     fig.update_yaxes(autorange="reversed")
 
     for d in week_days:
@@ -767,7 +824,3 @@ def _run_basic_tests():
 
 if os.environ.get("RUN_SCHEDULE_TESTS"):
     _run_basic_tests()
-
-
-
-
