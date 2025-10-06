@@ -162,7 +162,6 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
     logger.info(f"State loaded from {filename}")
     return True
 
-recalculate_arrival_windows()
 
 # ---------------------- INITIALIZATION ----------------------
 
