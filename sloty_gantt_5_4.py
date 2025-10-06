@@ -241,37 +241,66 @@ def get_day_slots_for_brygada(brygada: str, day: date) -> List[Dict]:
     return sorted(st.session_state.schedules.get(brygada, {}).get(d, []), key=lambda s: s["start"])
 
 
-def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
-    # skopiuj, aby nie mutować obiektu przekazanego przez caller
-    s = dict(slot)
-    if "id" not in s:
-        s["id"] = str(uuid.uuid4())
-    d = day.strftime("%Y-%m-%d")
-    if brygada not in st.session_state.schedules:
-        st.session_state.schedules[brygada] = {}
-    if d not in st.session_state.schedules[brygada]:
-        st.session_state.schedules[brygada][d] = []
+def add_slot_to_brygada(brygada: str, day: date, slot: Dict[str, Any]) -> None:
+    """
+    Dodaje slot do harmonogramu brygady w danym dniu.
+    """
+    if "id" not in slot:
+        slot["id"] = str(uuid.uuid4())
 
-    # Dodaj pola dla przedziału przyjazdu (jeśli start istnieje)
-    try:
-        czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 90))
-        czas_po = int(st.session_state.get("czas_rezerwowy_po", 90))
-    except Exception:
-        czas_przed = 90
-        czas_po = 90
+    # --- Nowa logika: obliczanie przedziału przyjazdu z ograniczeniem do godzin pracy ---
+    czas_rezerwowy_przed = st.session_state.get("czas_rezerwowy_przed", 90)
+    czas_rezerwowy_po = st.session_state.get("czas_rezerwowy_po", 90)
 
-    if "start" in s and s["start"]:
-        przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(s["start"], czas_przed, czas_po)
-        s["arrival_window_start"] = przyjazd_start
-        s["arrival_window_end"] = przyjazd_end
-    else:
-        s["arrival_window_start"] = None
-        s["arrival_window_end"] = None
+    # Surowy przedział przyjazdu (bez ograniczeń)
+    raw_start = slot["start"] - timedelta(minutes=czas_rezerwowy_przed)
+    raw_end = slot["start"] + timedelta(minutes=slot["duration_min"] + czas_rezerwowy_po)
+    arrival_duration = timedelta(minutes=czas_rezerwowy_przed + czas_rezerwowy_po)
 
-    st.session_state.schedules[brygada][d].append(s)
-    st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
-    if save:
-        save_state_to_json()
+    # Godziny pracy brygady
+    work_start_t, work_end_t = st.session_state.working_hours.get(brygada, (time(6, 0), time(18, 0)))
+    day_date = slot["start"].date()
+    work_start_dt = datetime.combine(day_date, work_start_t)
+    work_end_dt = datetime.combine(day_date, work_end_t)
+
+    # Obsługa nocnych zmian (koniec po północy)
+    if work_end_dt <= work_start_dt:
+        work_end_dt += timedelta(days=1)
+
+    # Początkowo przyjmujemy surowe wartości
+    arrival_start = raw_start
+    arrival_end = raw_end
+
+    # Jeśli początek przed godzinami pracy — przesuwamy w górę
+    if arrival_start < work_start_dt:
+        arrival_start = work_start_dt
+        arrival_end = arrival_start + arrival_duration
+
+    # Jeśli koniec po godzinach pracy — przesuwamy w dół
+    if arrival_end > work_end_dt:
+        arrival_end = work_end_dt
+        arrival_start = arrival_end - arrival_duration
+
+    # Dodatkowe przycięcie bezpieczeństwa (na wypadek ekstremalnych wartości)
+    arrival_start = max(arrival_start, work_start_dt)
+    arrival_end = min(arrival_end, work_end_dt)
+
+    slot["arrival_window_start"] = arrival_start
+    slot["arrival_window_end"] = arrival_end
+
+    # --- Zapis do harmonogramu ---
+    day_str = day.strftime("%Y-%m-%d")
+    st.session_state.schedules.setdefault(brygada, {})
+    st.session_state.schedules[brygada].setdefault(day_str, [])
+
+    st.session_state.schedules[brygada][day_str].append(slot)
+    st.session_state.schedules[brygada][day_str].sort(key=lambda s: s["start"])
+
+    save_state_to_json()
+    logger.info(
+        f"Dodano slot do brygady {brygada} w dniu {day_str} z przyjazdem {arrival_start.time()}–{arrival_end.time()}"
+    )
+
 
 
 def delete_slot(brygada: str, day_str: str, slot_id: str):
