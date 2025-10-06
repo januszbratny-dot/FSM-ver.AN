@@ -646,15 +646,23 @@ else:
         # Wyświetl dostępne brygady
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
 
-        # Oblicz przedział przyjazdu na podstawie ustawień
+        # Oblicz przedział przyjazdu i dopasuj do godzin pracy brygady
         czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
         czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
-        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
+        brygada = s['brygady'][0]
+        wh_start, wh_end = st.session_state.working_hours.get(brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END))
+        wh_start_dt = datetime.combine(booking_day, wh_start)
+        wh_end_dt = datetime.combine(booking_day, wh_end)
+        if wh_end_dt <= wh_start_dt:
+            wh_end_dt += timedelta(days=1)
+
+        arrival_start = max(s['start'] - timedelta(minutes=czas_przed), wh_start_dt)
+        arrival_end = min(s['end'] + timedelta(minutes=czas_po), wh_end_dt)
+
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
 
         # Przycisk rezerwacji slotu
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
-            brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
                 "end": s["end"],
@@ -666,7 +674,6 @@ else:
             st.session_state.client_counter += 1
             st.success(f"✅ Zarezerwowano slot {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} w brygadzie {brygada}.")
             st.rerun()
-
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
 st.subheader("⚡ Automatyczne dociążenie wszystkich brygad")
