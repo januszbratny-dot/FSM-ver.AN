@@ -253,45 +253,77 @@ def _wh_minutes(wh_start: time, wh_end: time) -> int:
 
 
 def schedule_client_immediately(client_name: str, slot_type_name: str, day: date, pref_start: time, pref_end: time) -> Tuple[bool, Optional[Dict]]:
+    """
+    Znajduje najlepszy możliwy termin dla klienta w danym dniu i preferowanym przedziale,
+    preferując sloty jak najbliżej początku lub końca dnia pracy brygady.
+    Zwraca (True, slot_dict) lub (False, None). W przypadku braku kandydatów inkrementuje not_found_counter.
+    """
+    # znajdź typ slotu
     slot_type = next((s for s in st.session_state.slot_types if s["name"] == slot_type_name), None)
     if not slot_type:
         return False, None
     dur = timedelta(minutes=slot_type["minutes"])
-    candidates: List[Tuple[str, datetime, datetime]] = []
+
+    candidates: List[Tuple[str, datetime, datetime, float, int]] = []
+    # candidates entries: (brygada, start_dt, end_dt, edge_priority_seconds, utilization_minutes)
 
     for b in st.session_state.brygady:
         existing = get_day_slots_for_brygada(b, day)
         wh_start, wh_end = st.session_state.working_hours.get(b, (DEFAULT_WORK_START, DEFAULT_WORK_END))
 
-        # compute pref constrained by working hours - support overnight
-        # we represent start/end as datetimes; if wh_end <= wh_start treat as next day
+        # day start/end jako datetimes, obsługa overnight (end <= start)
         day_start_dt = datetime.combine(day, wh_start)
         day_end_dt = datetime.combine(day, wh_end)
         if day_end_dt <= day_start_dt:
             day_end_dt += timedelta(days=1)
 
+        # preferowany przedział (również z obsługą przekraczania północy)
         pref_start_dt = datetime.combine(day, pref_start)
         pref_end_dt = datetime.combine(day, pref_end)
         if pref_end_dt <= pref_start_dt:
             pref_end_dt += timedelta(days=1)
 
+        # ograniczamy przeszukiwanie do przecięcia godzin pracy i preferowanego przedziału
         start_dt = max(day_start_dt, pref_start_dt)
         end_dt = min(day_end_dt, pref_end_dt)
+        if end_dt <= start_dt:
+            continue  # brak dopasowania przedziałów dla tej brygady
 
         t = start_dt
         while t + dur <= end_dt:
-            overlap = any(not (t + dur <= s["start"] or t >= s["end"]) for s in existing)
+            t_end = t + dur
+            # czy koliduje z istniejącymi?
+            overlap = any(not (t_end <= s["start"] or t >= s["end"]) for s in existing)
             if not overlap:
-                candidates.append((b, t, t + dur))
+                # oblicz priorytet krawędzi: odległość do początku lub końca dnia pracy (w sekundach)
+                # (liczymy względem pełnych godzin pracy brygady, nie względem preferowanego podprzedziału)
+                dist_to_start = (t - day_start_dt).total_seconds()
+                dist_to_end = (day_end_dt - t_end).total_seconds()
+                edge_priority = min(dist_to_start, dist_to_end)
+
+                # wykorzystanie brygady (sumaryczne minuty w tym dniu)
+                utilization = sum(s["duration_min"] for d in st.session_state.schedules.get(b, {}).values() for s in d)
+
+                candidates.append((b, t, t_end, edge_priority, utilization))
             t += timedelta(minutes=SEARCH_STEP_MINUTES)
 
     if not candidates:
+        # brak dostępnych terminów
+        st.session_state.not_found_counter = st.session_state.get("not_found_counter", 0) + 1
         return False, None
 
-    # wybierz najwcześniejszy start; przy równych starts -> najmniej wykorzystana brygada
-    candidates.sort(key=lambda x: (x[1], sum(s["duration_min"] for d in st.session_state.schedules.get(x[0], {}).values() for s in d)))
-    brygada, start, end = candidates[0]
-    slot = {"start": start, "end": end, "slot_type": slot_type_name, "duration_min": slot_type["minutes"], "client": client_name}
+    # sortuj: najpierw najmniejszy edge_priority (bliżej brzegu dnia), potem najmniejsze utilization, potem najwcześniejszy start
+    candidates.sort(key=lambda x: (x[3], x[4], x[1]))
+    chosen = candidates[0]
+    brygada, start, end, _, _ = chosen
+
+    slot = {
+        "start": start,
+        "end": end,
+        "slot_type": slot_type_name,
+        "duration_min": slot_type["minutes"],
+        "client": client_name,
+    }
 
     add_slot_to_brygada(brygada, day, slot)
     return True, slot
