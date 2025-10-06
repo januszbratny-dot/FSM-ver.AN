@@ -222,18 +222,17 @@ def weighted_choice(slot_types: List[Dict]) -> Optional[str]:
 
 # ---------------------- ARRIVAL WINDOW HELPERS ----------------------
 
-def oblicz_przedzial_przyjazdu(start_time, work_start, work_end, czas_rezerwowy_przed, czas_rezerwowy_po):
+def oblicz_przedzial_przyjazdu(start_time: datetime,
+                               czas_rezerwowy_przed: int,
+                               czas_rezerwowy_po: int) -> Tuple[datetime, datetime]:
+    """
+    Zwraca przedział czasowy przyjazdu brygady do klienta.
+    start_time – czas rozpoczęcia głównego slotu
+    czas_rezerwowy_przed/po – minuty
+    """
     przyjazd_start = start_time - timedelta(minutes=czas_rezerwowy_przed)
     przyjazd_end = start_time + timedelta(minutes=czas_rezerwowy_po)
-
-    # Przycinanie do godzin pracy brygady
-    if przyjazd_start < work_start:
-        przyjazd_start = work_start
-    if przyjazd_end > work_end:
-        przyjazd_end = work_end
-
     return przyjazd_start, przyjazd_end
-
 
 # ---------------------- SCHEDULE MANAGEMENT ----------------------
 
@@ -645,7 +644,7 @@ else:
         # oblicz arrival window na podstawie ustawień w session_state
         czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
         czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
-        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], work_start, work_end, czas_rezerwowy_przed, czas_rezerwowy_po)
+        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
