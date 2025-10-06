@@ -736,3 +736,5 @@ def _run_basic_tests():
 
 if os.environ.get("RUN_SCHEDULE_TESTS"):
     _run_basic_tests()
+
+st.write("📅 Working hours:", st.session_state.get("working_hours"))
