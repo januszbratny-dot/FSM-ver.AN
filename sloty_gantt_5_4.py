@@ -441,16 +441,15 @@ booking_day = st.session_state.booking_day
 # funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
 # funkcja do generowania dostępnych slotów bez podziału na brygady
 def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
-    """Zwraca tylko sloty, które można przydzielić na początku/końcu dnia pracy
+    """Zwraca sloty, które można przydzielić na początku/końcu dnia pracy
     lub które bezpośrednio sąsiadują z już zarezerwowanymi slotami."""
 
     available_slots = []
+
     for brygada, working_hours in st.session_state.working_hours.items():
         wh_start, wh_end = working_hours
         wh_start_dt = datetime.combine(day, wh_start)
         wh_end_dt = datetime.combine(day, wh_end)
-
-        # Obsługa nocnych zmian (jeśli koniec < start)
         if wh_end_dt <= wh_start_dt:
             wh_end_dt += timedelta(days=1)
 
@@ -459,46 +458,48 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
         candidates = []
 
         if not used_intervals:
-            # Jeśli brak rezerwacji – pokaż slot na początku dnia
+            # Brak rezerwacji -> pokaż początek i koniec dnia pracy
             start_dt = wh_start_dt
             end_dt = start_dt + timedelta(minutes=slot_minutes)
             if end_dt <= wh_end_dt:
                 candidates.append((start_dt, end_dt))
 
-            # Dodatkowo slot na końcu dnia (jeśli nie ten sam)
             end_dt = wh_end_dt
             start_dt = end_dt - timedelta(minutes=slot_minutes)
             if start_dt >= wh_start_dt:
-                if not any(abs((start_dt - c[0]).total_seconds()) < 60 for c in candidates):
-                    candidates.append((start_dt, end_dt))
-
+                candidates.append((start_dt, end_dt))
         else:
-            # Sloty przylegające do istniejących lub brzegowe
+            # Sloty przylegające
             for s in used_intervals:
-                before_start = s[0] - timedelta(minutes=slot_minutes)
-                after_start = s[1]
-
                 # Slot przed istniejącym
+                before_end = s[0]
+                before_start = before_end - timedelta(minutes=slot_minutes)
                 if before_start >= wh_start_dt:
-                    before_end = s[0]
                     candidates.append((before_start, before_end))
 
                 # Slot po istniejącym
+                after_start = s[1]
                 after_end = after_start + timedelta(minutes=slot_minutes)
                 if after_end <= wh_end_dt:
                     candidates.append((after_start, after_end))
 
-            # Brzegowe – jeśli pierwszy slot nie zaczyna się o godzinie startu pracy
+            # Brzegowe – jeśli pierwszy slot nie sięga początku pracy
             first_slot_start = min(s[0] for s in used_intervals)
             if first_slot_start > wh_start_dt:
-                candidates.append((wh_start_dt, wh_start_dt + timedelta(minutes=slot_minutes)))
+                start_dt = wh_start_dt
+                end_dt = start_dt + timedelta(minutes=slot_minutes)
+                if end_dt <= first_slot_start:
+                    candidates.append((start_dt, end_dt))
 
-            # Jeśli ostatni slot nie kończy się o godzinie końca pracy
+            # Brzegowe – jeśli ostatni slot nie sięga końca pracy
             last_slot_end = max(s[1] for s in used_intervals)
             if last_slot_end < wh_end_dt:
-                candidates.append((wh_end_dt - timedelta(minutes=slot_minutes), wh_end_dt))
+                end_dt = wh_end_dt
+                start_dt = end_dt - timedelta(minutes=slot_minutes)
+                if start_dt >= last_slot_end:
+                    candidates.append((start_dt, end_dt))
 
-        # Usunięcie kolidujących i duplikatów
+        # Filtr kolizji (dla pewności)
         valid = []
         for c_start, c_end in candidates:
             overlaps = any(
@@ -508,7 +509,7 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
             if not overlaps:
                 valid.append((c_start, c_end))
 
-        # Dodaj do wyników
+        # Dodaj sloty do listy
         for start_dt, end_dt in sorted(set(valid)):
             available_slots.append({
                 "brygada": brygada,
@@ -531,7 +532,10 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
             "brygady": brygady
         })
 
-    return sorted(result, key=lambda x: x["start"])
+    result.sort(key=lambda x: x["start"])
+    logging.info(f"DEBUG: get_available_slots_for_day({day}) -> {len(result)} slots")
+    return result
+
 
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
