@@ -440,89 +440,89 @@ booking_day = st.session_state.booking_day
 
 # funkcja do generowania dostępnych slotów dla danego dnia i typu slotu
 # funkcja do generowania dostępnych slotów bez podziału na brygady
-# funkcja do generowania dostępnych slotów bez podziału na brygady
 def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int = SEARCH_STEP_MINUTES) -> List[Dict]:
-    available = []
-    all_slots = []
+    """Zwraca tylko sloty, które można przydzielić na początku/końcu dnia pracy
+    lub które bezpośrednio sąsiadują z już zarezerwowanymi slotami."""
 
-    # zbierz wszystkie potencjalne sloty ze wszystkich brygad
-    for b in st.session_state.brygady:
-        wh_start, wh_end = st.session_state.working_hours.get(b, (DEFAULT_WORK_START, DEFAULT_WORK_END))
-        day_start = datetime.combine(day, wh_start)
-        day_end = datetime.combine(day, wh_end)
-        if day_end <= day_start:
-            day_end += timedelta(days=1)
+    available_slots = []
+    day_start = datetime.combine(day, time(0, 0))
+    day_end = datetime.combine(day, time(23, 59))
 
-        existing = get_day_slots_for_brygada(b, day)
-        t = day_start
-        while t + timedelta(minutes=slot_minutes) <= day_end:
-            t_end = t + timedelta(minutes=slot_minutes)
-            overlap = any(not (t_end <= s["start"] or t >= s["end"]) for s in existing)
-            if not overlap:
-                all_slots.append({
-                    "brygada": b,
-                    "start": t,
-                    "end": t_end,
-                })
-            t += timedelta(minutes=step_minutes)
+    for brygada, working_hours in st.session_state.working_hours.items():
+        wh_start, wh_end = working_hours
+        wh_start_dt = datetime.combine(day, wh_start)
+        wh_end_dt = datetime.combine(day, wh_end)
 
-    # agregacja po godzinach — jeśli kilka brygad ma ten sam slot, pokazujemy go raz
+        # Obsługa nocnych zmian (jeśli koniec < start)
+        if wh_end_dt <= wh_start_dt:
+            wh_end_dt += timedelta(days=1)
+
+        slots = get_day_slots_for_brygada(brygada, day)
+        used_intervals = [(s["start"], s["end"]) for s in slots]
+
+        candidates = []
+
+        # Kandydat 1: start na początku dnia pracy
+        start_dt = wh_start_dt
+        end_dt = start_dt + timedelta(minutes=slot_minutes)
+        if end_dt <= wh_end_dt:
+            candidates.append((start_dt, end_dt))
+
+        # Kandydat 2: koniec na końcu dnia pracy
+        end_dt = wh_end_dt
+        start_dt = end_dt - timedelta(minutes=slot_minutes)
+        if start_dt >= wh_start_dt:
+            candidates.append((start_dt, end_dt))
+
+        # Kandydaci 3: sloty przylegające do istniejących
+        for s in used_intervals:
+            before_start = s[0] - timedelta(minutes=slot_minutes)
+            after_start = s[1]
+
+            # Slot przed istniejącym (nie wychodzi poza godziny pracy)
+            if before_start >= wh_start_dt:
+                before_end = s[0]
+                candidates.append((before_start, before_end))
+
+            # Slot po istniejącym (nie wychodzi poza godziny pracy)
+            after_end = after_start + timedelta(minutes=slot_minutes)
+            if after_end <= wh_end_dt:
+                candidates.append((after_start, after_end))
+
+        # Usunięcie kolidujących i duplikatów
+        valid = []
+        for c_start, c_end in candidates:
+            overlaps = any(
+                not (c_end <= u_start or c_start >= u_end) for u_start, u_end in used_intervals
+            )
+            if not overlaps:
+                valid.append((c_start, c_end))
+
+        # Dodaj do listy wynikowej
+        for start_dt, end_dt in sorted(set(valid)):
+            available_slots.append({
+                "brygada": brygada,
+                "start": start_dt,
+                "end": end_dt,
+                "slot_type": None
+            })
+
+    # Agregacja duplikatów między brygadami (jeśli mają te same godziny)
     grouped = {}
-    for s in all_slots:
+    for s in available_slots:
         key = (s["start"], s["end"])
         grouped.setdefault(key, []).append(s["brygada"])
 
-    for (start, end), brygady in grouped.items():
-        available.append({
-            "start": start,
-            "end": end,
-            "brygady": brygady  # lista dostępnych brygad
+    result = []
+    for (start_dt, end_dt), brygady in grouped.items():
+        result.append({
+            "start": start_dt,
+            "end": end_dt,
+            "brygady": brygady
         })
 
-    available.sort(key=lambda x: x["start"])
-    return available
+    return sorted(result, key=lambda x: x["start"])
 
-
-# pomocnicza funkcja: wybierz najluźniejszą brygadę spośród dostępnych
-def choose_best_brygada(brygady: List[str]) -> str:
-    def total_minutes(b):
-        return sum(s["duration_min"] for d in st.session_state.schedules.get(b, {}).values() for s in d)
-    return min(brygady, key=total_minutes) if brygady else st.session_state.brygady[0]
-
-
-available_slots = get_available_slots_for_day(booking_day, slot_type["minutes"], SEARCH_STEP_MINUTES)
-
-st.markdown("---")
-if not available_slots:
-    st.info("Brak wolnych terminów w tym dniu.")
-else:
-    st.write("Dostępne sloty (niezależnie od brygady):")
-    for s in available_slots:
-        cols = st.columns([3, 3, 2, 1])
-        cols[0].write(f"{s['start'].strftime('%H:%M')} — {s['end'].strftime('%H:%M')}")
-        cols[1].write(f"Typ: {slot_type_name} ({slot_type['minutes']} min)")
-        cols[2].write(f"Brygady dostępne: {len(s['brygady'])}")
-        btn_key = f"book_any_{s['start'].isoformat()}"
-
-        if cols[3].button("Rezerwuj", key=btn_key):
-            chosen_brygada = choose_best_brygada(s["brygady"])
-            slot = {
-                "start": s["start"],
-                "end": s["end"],
-                "slot_type": slot_type_name,
-                "duration_min": slot_type["minutes"],
-                "client": client_name,
-                "pref_range": None,
-            }
-            add_slot_to_brygada(chosen_brygada, booking_day, slot, save=True)
-            st.session_state.clients_added.append({
-                "client": client_name,
-                "slot_type": slot_type_name,
-                "pref_range": None
-            })
-            st.session_state.client_counter += 1
-            st.success(f"✅ Zarezerwowano: {client_name} — {chosen_brygada} {s['start'].strftime('%d-%m %H:%M')}")
-            st.rerun()
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
 st.subheader("⚡ Automatyczne dociążenie wszystkich brygad")
