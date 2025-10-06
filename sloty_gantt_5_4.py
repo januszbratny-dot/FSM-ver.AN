@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Dict, Tuple, Optional
 
 # ---------------------- CONFIG ----------------------
-STORAGE_FILENAME = "schedules."
+STORAGE_FILENAME = "schedules.json"
 SEARCH_STEP_MINUTES = 15  # krok wyszukiwania wolnego slotu
 DEFAULT_WORK_START = time(8, 0)
 DEFAULT_WORK_END = time(16, 0)
@@ -72,7 +72,7 @@ def parse_time_str(t: str) -> time:
 
 # ---------------------- PERSISTENCE ----------------------
 
-def schedules_to_able() -> Dict:
+def schedules_to_jsonable() -> Dict:
     data: Dict = {}
 
     for b, days in st.session_state.schedules.items():
@@ -108,12 +108,12 @@ def schedules_to_able() -> Dict:
     }
 
 
-def save_state_to_(filename: str = STORAGE_FILENAME):
+def save_state_to_json(filename: str = STORAGE_FILENAME):
     """Save state atomically to avoid file corruption on concurrent writes."""
-    data = schedules_to_able()
+    data = schedules_to_jsonable()
     dirn = os.path.dirname(os.path.abspath(filename)) or "."
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=dirn, delete=False) as tf:
-        .dump(data, tf, ensure_ascii=False, indent=2)
+        json.dump(data, tf, ensure_ascii=False, indent=2)
         tmpname = tf.name
     os.replace(tmpname, filename)
     logger.info(f"State saved to {filename}")
@@ -161,7 +161,6 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
     st.session_state.not_found_counter = data.get("not_found_counter", 0)
     logger.info(f"State loaded from {filename}")
     return True
-
 
 # ---------------------- INITIALIZATION ----------------------
 
@@ -310,6 +309,7 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
 
     if save:
         save_state_to_json()
+
 
 
 def delete_slot(brygada: str, day_str: str, slot_id: str):
@@ -564,7 +564,7 @@ with st.sidebar:
         st.session_state.clients_added = []
         st.session_state.client_counter = 1
         st.session_state.not_found_counter = 0
-        save_state_to_()
+        save_state_to_json()
         st.success("Harmonogram wyczyszczony.")
 
     # Arrival window settings
@@ -723,7 +723,7 @@ if st.button("🚀 Wypełnij cały dzień do 100%"):
                 slots_added_in_last_iteration = True
 
     # po zakończeniu pętli zapisz raz
-    save_state_to_()
+    save_state_to_json()
 
     # ustawiamy flagę, która będzie przetworzona w kolejnym renderze
     st.session_state["autofill_done"] = True
