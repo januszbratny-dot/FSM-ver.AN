@@ -483,7 +483,7 @@ else:
             })
             st.session_state.client_counter += 1
             st.success(f"✅ Zarezerwowano: {client_name} — {chosen_brygada} {s['start'].strftime('%d-%m %H:%M')}")
-            st.experimental_rerun()
+            st.rerun()
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
 st.subheader("⚡ Automatyczne dociążenie wszystkich brygad")
