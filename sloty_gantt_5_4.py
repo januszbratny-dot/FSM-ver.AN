@@ -251,7 +251,6 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         st.session_state.schedules[brygada] = {}
     if d not in st.session_state.schedules[brygada]:
         st.session_state.schedules[brygada][d] = []
-
     # Pobierz czasy rezerwowe
     try:
         czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
@@ -259,12 +258,7 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
     except Exception:
         czas_przed = 30
         czas_po = 10
-
     if "start" in s and s["start"]:
-        # domyślny przedział przyjazdu
-        arrival_window_start = s["start"] - timedelta(minutes=czas_przed)
-        arrival_window_end = s["end"] + timedelta(minutes=czas_po)
-
         # pobierz godziny pracy brygady
         wh_start, wh_end = st.session_state.working_hours.get(
             brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END)
@@ -273,24 +267,26 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         work_end = datetime.combine(s["start"].date(), wh_end)
         if work_end <= work_start:
             work_end += timedelta(days=1)  # obsługa zmian nocnych
-
-        # 🔹 Korekta okna przyjazdu względem godzin pracy
-        if arrival_window_start < work_start:
-            arrival_window_start = work_start + timedelta(minutes=czas_przed + czas_po)
-        if arrival_window_end > work_end:
-            arrival_window_end = work_end - timedelta(minutes=czas_przed + czas_po)
-
+        # Prawidłowe wyliczanie okna przyjazdu
+        arrival_window_start = max(
+            s["start"] - timedelta(minutes=czas_przed),
+            work_start
+        )
+        arrival_window_end = min(
+            s["start"] + timedelta(minutes=czas_po),
+            work_end
+        )
         s["arrival_window_start"] = arrival_window_start
         s["arrival_window_end"] = arrival_window_end
     else:
         s["arrival_window_start"] = None
         s["arrival_window_end"] = None
-
     # dodaj slot
     st.session_state.schedules[brygada][d].append(s)
     st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
     if save:
         save_state_to_json()
+
 
 
 
