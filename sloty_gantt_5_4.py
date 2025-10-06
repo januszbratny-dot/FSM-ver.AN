@@ -259,6 +259,7 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         st.session_state.schedules[brygada] = {}
     if d not in st.session_state.schedules[brygada]:
         st.session_state.schedules[brygada][d] = []
+
     # Dodaj pola dla przedziału przyjazdu (jeśli start istnieje)
     try:
         czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
@@ -266,22 +267,24 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
     except Exception:
         czas_przed = 30
         czas_po = 10
+
     if "start" in s and s["start"]:
         wh_start, wh_end = st.session_state.working_hours.get(
-            brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END)
-        )
-        work_start_dt = datetime.combine(day, wh_start)
-        work_end_dt = datetime.combine(day, wh_end)
-        if work_end_dt <= work_start_dt:
-            work_end_dt += timedelta(days=1)
-        przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(
-            s["start"], czas_przed, czas_po, work_start_dt, work_end_dt
-        )
+        brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END)
+    )
+    work_start_dt = datetime.combine(day, wh_start)
+    work_end_dt = datetime.combine(day, wh_end)
+    if work_end_dt <= work_start_dt:
+        work_end_dt += timedelta(days=1)
+    przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(
+        s["start"], czas_przed, czas_po, work_start_dt, work_end_dt
+    )
         s["arrival_window_start"] = przyjazd_start
         s["arrival_window_end"] = przyjazd_end
     else:
         s["arrival_window_start"] = None
         s["arrival_window_end"] = None
+
     st.session_state.schedules[brygada][d].append(s)
     st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
     if save:
