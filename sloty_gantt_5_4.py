@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import random
 import os
-import json
+import 
 import tempfile
 import logging
 import uuid
@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Dict, Tuple, Optional
 
 # ---------------------- CONFIG ----------------------
-STORAGE_FILENAME = "schedules.json"
+STORAGE_FILENAME = "schedules."
 SEARCH_STEP_MINUTES = 15  # krok wyszukiwania wolnego slotu
 DEFAULT_WORK_START = time(8, 0)
 DEFAULT_WORK_END = time(16, 0)
@@ -72,7 +72,7 @@ def parse_time_str(t: str) -> time:
 
 # ---------------------- PERSISTENCE ----------------------
 
-def schedules_to_jsonable() -> Dict:
+def schedules_to_able() -> Dict:
     data: Dict = {}
 
     for b, days in st.session_state.schedules.items():
@@ -108,12 +108,12 @@ def schedules_to_jsonable() -> Dict:
     }
 
 
-def save_state_to_json(filename: str = STORAGE_FILENAME):
+def save_state_to_(filename: str = STORAGE_FILENAME):
     """Save state atomically to avoid file corruption on concurrent writes."""
-    data = schedules_to_jsonable()
+    data = schedules_to_able()
     dirn = os.path.dirname(os.path.abspath(filename)) or "."
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=dirn, delete=False) as tf:
-        json.dump(data, tf, ensure_ascii=False, indent=2)
+        .dump(data, tf, ensure_ascii=False, indent=2)
         tmpname = tf.name
     os.replace(tmpname, filename)
     logger.info(f"State saved to {filename}")
@@ -161,6 +161,8 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
     st.session_state.not_found_counter = data.get("not_found_counter", 0)
     logger.info(f"State loaded from {filename}")
     return True
+
+recalculate_arrival_windows()
 
 # ---------------------- INITIALIZATION ----------------------
 
@@ -310,6 +312,40 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
     if save:
         save_state_to_json()
 
+def recalculate_arrival_windows():
+    """Przelicza wszystkie przedziały przyjazdu dla istniejących slotów."""
+    for brygada, days in st.session_state.schedules.items():
+        for d, slots in days.items():
+            for s in slots:
+                if "start" not in s or not s["start"]:
+                    continue
+                try:
+                    czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 90))
+                    czas_po = int(st.session_state.get("czas_rezerwowy_po", 90))
+                except Exception:
+                    czas_przed = 90
+                    czas_po = 90
+
+                day_date = datetime.strptime(d, "%Y-%m-%d").date()
+                wh_start, wh_end = st.session_state.working_hours.get(brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END))
+                wh_start_dt = datetime.combine(day_date, wh_start)
+                wh_end_dt = datetime.combine(day_date, wh_end)
+                if wh_end_dt <= wh_start_dt:  # dla nocnych zmian
+                    wh_end_dt += timedelta(days=1)
+
+                przyjazd_start = s["start"] - timedelta(minutes=czas_przed)
+                przyjazd_end = s["start"] + timedelta(minutes=czas_po)
+
+                # Dopasuj do godzin pracy
+                if przyjazd_start < wh_start_dt:
+                    przyjazd_start = wh_start_dt
+                    przyjazd_end = przyjazd_start + timedelta(minutes=czas_przed + czas_po)
+                if przyjazd_end > wh_end_dt:
+                    przyjazd_end = wh_end_dt
+                    przyjazd_start = przyjazd_end - timedelta(minutes=czas_przed + czas_po)
+
+                s["arrival_window_start"] = przyjazd_start
+                s["arrival_window_end"] = przyjazd_end
 
 
 def delete_slot(brygada: str, day_str: str, slot_id: str):
@@ -564,7 +600,7 @@ with st.sidebar:
         st.session_state.clients_added = []
         st.session_state.client_counter = 1
         st.session_state.not_found_counter = 0
-        save_state_to_json()
+        save_state_to_()
         st.success("Harmonogram wyczyszczony.")
 
     # Arrival window settings
@@ -723,7 +759,7 @@ if st.button("🚀 Wypełnij cały dzień do 100%"):
                 slots_added_in_last_iteration = True
 
     # po zakończeniu pętli zapisz raz
-    save_state_to_json()
+    save_state_to_()
 
     # ustawiamy flagę, która będzie przetworzona w kolejnym renderze
     st.session_state["autofill_done"] = True
