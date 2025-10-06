@@ -252,7 +252,7 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
     if d not in st.session_state.schedules[brygada]:
         st.session_state.schedules[brygada][d] = []
 
-    # Dodaj pola dla przedziału przyjazdu (jeśli start istnieje)
+    # Pobierz czasy rezerwowe
     try:
         czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
         czas_po = int(st.session_state.get("czas_rezerwowy_po", 10))
@@ -261,17 +261,37 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         czas_po = 10
 
     if "start" in s and s["start"]:
-        przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(s["start"], czas_przed, czas_po)
-        s["arrival_window_start"] = przyjazd_start
-        s["arrival_window_end"] = przyjazd_end
+        # domyślny przedział przyjazdu
+        arrival_window_start = s["start"] - timedelta(minutes=czas_przed)
+        arrival_window_end = s["end"] + timedelta(minutes=czas_po)
+
+        # pobierz godziny pracy brygady
+        wh_start, wh_end = st.session_state.working_hours.get(
+            brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END)
+        )
+        work_start = datetime.combine(s["start"].date(), wh_start)
+        work_end = datetime.combine(s["start"].date(), wh_end)
+        if work_end <= work_start:
+            work_end += timedelta(days=1)  # obsługa zmian nocnych
+
+        # 🔹 Korekta okna przyjazdu względem godzin pracy
+        if arrival_window_start < work_start:
+            arrival_window_start = work_start + timedelta(minutes=czas_przed + czas_po)
+        if arrival_window_end > work_end:
+            arrival_window_end = work_end - timedelta(minutes=czas_przed + czas_po)
+
+        s["arrival_window_start"] = arrival_window_start
+        s["arrival_window_end"] = arrival_window_end
     else:
         s["arrival_window_start"] = None
         s["arrival_window_end"] = None
 
+    # dodaj slot
     st.session_state.schedules[brygada][d].append(s)
     st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
     if save:
         save_state_to_json()
+
 
 
 def delete_slot(brygada: str, day_str: str, slot_id: str):
