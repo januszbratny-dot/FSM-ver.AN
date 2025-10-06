@@ -221,15 +221,20 @@ def get_day_slots_for_brygada(brygada: str, day: date) -> List[Dict]:
 
 
 def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
+    # skopiuj, aby nie mutować obiektu przekazanego przez caller
+    s = dict(slot)
+    if "id" not in s:
+        s["id"] = str(uuid.uuid4())
     d = day.strftime("%Y-%m-%d")
     if brygada not in st.session_state.schedules:
         st.session_state.schedules[brygada] = {}
     if d not in st.session_state.schedules[brygada]:
         st.session_state.schedules[brygada][d] = []
-    st.session_state.schedules[brygada][d].append(slot)
-    st.session_state.schedules[brygada][d].sort(key=lambda s: s["start"])
+    st.session_state.schedules[brygada][d].append(s)
+    st.session_state.schedules[brygada][d].sort(key=lambda x: x["start"])
     if save:
         save_state_to_json()
+
 
 
 def delete_slot(brygada: str, day_str: str, start_iso: str):
