@@ -224,22 +224,14 @@ def weighted_choice(slot_types: List[Dict]) -> Optional[str]:
 
 def oblicz_przedzial_przyjazdu(start_time: datetime,
                                czas_rezerwowy_przed: int,
-                               czas_rezerwowy_po: int,
-                               work_start: datetime,
-                               work_end: datetime) -> tuple[datetime, datetime]:
+                               czas_rezerwowy_po: int) -> Tuple[datetime, datetime]:
     """
-    Zwraca przedział czasowy przyjazdu brygady do klienta, uwzględniając godziny pracy brygady.
+    Zwraca przedział czasowy przyjazdu brygady do klienta.
+    start_time – czas rozpoczęcia głównego slotu
+    czas_rezerwowy_przed/po – minuty
     """
     przyjazd_start = start_time - timedelta(minutes=czas_rezerwowy_przed)
     przyjazd_end = start_time + timedelta(minutes=czas_rezerwowy_po)
-
-    if przyjazd_start < work_start:
-        przyjazd_start = work_start + timedelta(minutes=czas_rezerwowy_przed)
-        przyjazd_end = work_start + timedelta(minutes=czas_rezerwowy_przed + czas_rezerwowy_po)
-    elif przyjazd_end > work_end:
-        przyjazd_end = work_end - timedelta(minutes=czas_rezerwowy_po)
-        przyjazd_start = work_end - timedelta(minutes=czas_rezerwowy_przed + czas_rezerwowy_po)
-
     return przyjazd_start, przyjazd_end
 
 # ---------------------- SCHEDULE MANAGEMENT ----------------------
@@ -269,16 +261,7 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         czas_po = 10
 
     if "start" in s and s["start"]:
-        wh_start, wh_end = st.session_state.working_hours.get(
-        brygada, (DEFAULT_WORK_START, DEFAULT_WORK_END)
-    )
-    work_start_dt = datetime.combine(day, wh_start)
-    work_end_dt = datetime.combine(day, wh_end)
-    if work_end_dt <= work_start_dt:
-        work_end_dt += timedelta(days=1)
-    przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(
-        s["start"], czas_przed, czas_po, work_start_dt, work_end_dt
-    )
+        przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(s["start"], czas_przed, czas_po)
         s["arrival_window_start"] = przyjazd_start
         s["arrival_window_end"] = przyjazd_end
     else:
@@ -623,16 +606,7 @@ else:
         # oblicz arrival window na podstawie ustawień w session_state
         czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 30))
         czas_po = int(st.session_state.get('czas_rezerwowy_po', 10))
-        wh_start, wh_end = st.session_state.working_hours.get(
-        s['brygady'][0], (DEFAULT_WORK_START, DEFAULT_WORK_END)
-    )
-    work_start_dt = datetime.combine(booking_day, wh_start)
-    work_end_dt = datetime.combine(booking_day, wh_end)
-    if work_end_dt <= work_start_dt:
-        work_end_dt += timedelta(days=1)
-    arrival_start, arrival_end = oblicz_przedzial_przyjazdu(
-        s['start'], czas_przed, czas_po, work_start_dt, work_end_dt
-    )
+        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
         col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
         if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
