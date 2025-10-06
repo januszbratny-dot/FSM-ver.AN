@@ -257,8 +257,8 @@ def add_slot_to_brygada(brygada: str, day: date, slot: Dict, save: bool = True):
         czas_przed = int(st.session_state.get("czas_rezerwowy_przed", 30))
         czas_po = int(st.session_state.get("czas_rezerwowy_po", 10))
     except Exception:
-        czas_przed = 30
-        czas_po = 10
+        czas_przed = 90
+        czas_po = 90
 
     if "start" in s and s["start"]:
         przyjazd_start, przyjazd_end = oblicz_przedzial_przyjazdu(s["start"], czas_przed, czas_po)
