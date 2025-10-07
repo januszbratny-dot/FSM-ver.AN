@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Dict, Tuple, Optional
 
 # ---------------------- CONFIG ----------------------
-STORAGE_FILENAME = "schedules.json"x
+STORAGE_FILENAME = "schedules.json"
 SEARCH_STEP_MINUTES = 15  # krok wyszukiwania wolnego slotu
 DEFAULT_WORK_START = time(8, 0)
 DEFAULT_WORK_END = time(16, 0)
