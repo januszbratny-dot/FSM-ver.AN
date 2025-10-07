@@ -642,22 +642,17 @@ if not available_slots:
     st.info("Brak dostępnych slotów dla wybranego dnia.")
 else:
     for i, s in enumerate(available_slots):
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        # Zmiana: tylko 3 kolumny zamiast 4
+        col1, col2, col3 = st.columns([2, 2, 1])
 
         # Wyświetl godzinę slotu
-        col1.write(f"🕐🚗 Przedział przyjazdu:  {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
+        col1.write(f"🚗 Przedział przyjazdu: {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
 
         # Wyświetl dostępne brygady
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
 
-        # Oblicz przedział przyjazdu na podstawie ustawień
-        czas_przed = int(st.session_state.get('czas_rezerwowy_przed', 90))
-        czas_po = int(st.session_state.get('czas_rezerwowy_po', 90))
-        arrival_start, arrival_end = oblicz_przedzial_przyjazdu(s['start'], czas_przed, czas_po)
-        col3.write(f"🚗 Przedział przyjazdu: {arrival_start.strftime('%H:%M')} – {arrival_end.strftime('%H:%M')}")
-
         # Przycisk rezerwacji slotu
-        if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
+        if col3.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
