@@ -533,22 +533,59 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
 st.set_page_config(page_title="Harmonogram slotów", layout="wide")
 st.title("📅 Harmonogram slotów - Tydzień")
 
-with st.sidebar:
-    st.subheader("⚙️ Konfiguracja")
+# ==========================================
+# ⚙️ KONFIGURACJA SLOTÓW I BRYGAD
+# ==========================================
+st.sidebar.subheader("⚙️ Konfiguracja")
 
-    # slot types editor with validation
-    txt = st.text_area("Typy slotów (format: Nazwa, minuty, waga)",
-                       value="\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types))
-    parsed = parse_slot_types(txt)
-    if parsed:
-        st.session_state.slot_types = parsed
+with st.sidebar.form("config_form"):
+    st.markdown("**Typy slotów (format: Nazwa, minuty, waga)**")
+    default_slot_types_text = "\n".join(
+        f"{name},{data['minutes']},{data['weight']}"
+        for name, data in st.session_state.slot_types.items()
+    )
+    slot_types_input = st.text_area(
+        " ",
+        value=default_slot_types_text,
+        key="slot_types_input",
+        height=100
+    )
 
-    # brygady editor
-    txt_b = st.text_area("Lista brygad", value="\n".join(st.session_state.brygady))
-    brygady_new = [line.strip() for line in txt_b.splitlines() if line.strip()]
-    if brygady_new and brygady_new != st.session_state.brygady:
-        st.session_state.brygady = brygady_new
-    ensure_brygady_in_state(st.session_state.brygady)
+    st.markdown("**Lista brygad**")
+    default_brygady_text = "\n".join(st.session_state.brygady)
+    brygady_input = st.text_area(
+        " ",
+        value=default_brygady_text,
+        key="brygady_input",
+        height=80
+    )
+
+    submitted = st.form_submit_button("💾 Zapisz konfigurację")
+
+if submitted:
+    new_slot_types = {}
+    for line in slot_types_input.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            name, minutes, weight = [x.strip() for x in line.split(",")]
+            new_slot_types[name] = {
+                "minutes": int(minutes),
+                "weight": float(weight)
+            }
+        except Exception as e:
+            st.warning(f"Błąd w linii: `{line}` → {e}")
+
+    st.session_state.slot_types = new_slot_types
+    st.session_state.brygady = [
+        b.strip() for b in brygady_input.splitlines() if b.strip()
+    ]
+
+    save_state_to_json()
+    st.success("✅ Konfiguracja zapisana pomyślnie.")
+    st.rerun()
+
 
     st.markdown("---")
     st.write("Godziny pracy (możesz edytować każdą brygadę)")
