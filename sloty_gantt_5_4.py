@@ -164,18 +164,22 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
 
 # ---------------------- INITIALIZATION ----------------------
 
-if "slot_types" not in st.session_state:
-    if not load_state_from_json():
-        st.session_state.slot_types = [
-            {"name": "Standard", "minutes": 60, "weight": 1.0}
-        ]
-        st.session_state.brygady = ["Brygada 1", "Brygada 2"]
-        st.session_state.working_hours = {}
-        st.session_state.schedules = {}
-        st.session_state.clients_added = []
-        st.session_state.balance_horizon = "week"
-        st.session_state.client_counter = 1
-        st.session_state.not_found_counter = 0
+if not load_state_from_json():
+    st.session_state.slot_types = [
+        {"name": "Zlecenie krótkie", "minutes": 30, "weight": 1.0},
+        {"name": "Zlecenie normalne", "minutes": 60, "weight": 1.0},
+        {"name": "Zlecenie długie", "minutes": 90, "weight": 1.0}
+    ]
+    st.session_state.brygady = ["Brygada 1", "Brygada 2"]
+    st.session_state.working_hours = {
+        "Brygada 1": (DEFAULT_WORK_START, DEFAULT_WORK_END),  # 08:00–16:00
+        "Brygada 2": (time(12, 0), time(20, 0))             # 12:00–20:00
+    }
+    st.session_state.schedules = {}
+    st.session_state.clients_added = []
+    st.session_state.balance_horizon = "week"
+    st.session_state.client_counter = 1
+    st.session_state.not_found_counter = 0
 
 # stable keys for widgets (avoid using raw brygada names as keys)
 def brygada_key(i: int, field: str) -> str:
