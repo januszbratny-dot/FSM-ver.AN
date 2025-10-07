@@ -533,22 +533,36 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
 st.set_page_config(page_title="Harmonogram slotów", layout="wide")
 st.title("📅 Harmonogram slotów - Tydzień")
 
+# ---------------------- SIDEBAR: Konfiguracja (formularz) ----------------------
 with st.sidebar:
     st.subheader("⚙️ Konfiguracja")
 
-    # slot types editor with validation
-    txt = st.text_area("Typy slotów (format: Nazwa, minuty, waga)",
-                       value="\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types))
-    parsed = parse_slot_types(txt)
-    if parsed:
-        st.session_state.slot_types = parsed
+    with st.form("config_form"):
+        st.markdown("**Typy slotów (format: Nazwa, minuty, waga)**")
+        default_slot_types_text = "\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types)
+        slot_types_input = st.text_area(" ", value=default_slot_types_text, key="slot_types_input", height=120)
 
-    # brygady editor
-    txt_b = st.text_area("Lista brygad", value="\n".join(st.session_state.brygady))
-    brygady_new = [line.strip() for line in txt_b.splitlines() if line.strip()]
-    if brygady_new and brygady_new != st.session_state.brygady:
-        st.session_state.brygady = brygady_new
-    ensure_brygady_in_state(st.session_state.brygady)
+        st.markdown("**Lista brygad**")
+        default_brygady_text = "\n".join(st.session_state.brygady)
+        brygady_input = st.text_area(" ", value=default_brygady_text, key="brygady_input", height=80)
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            submitted = st.form_submit_button("💾 Zapisz konfigurację")
+        with col_b:
+            reset_default = st.form_submit_button("♻️ Przywróć ustawienia domyślne")
+
+    if submitted:
+        parsed = parse_slot_types(slot_types_input)
+        if parsed:
+            st.session_state.slot_types = parsed
+        brygady_new = [line.strip() for line in brygady_input.splitlines() if line.strip()]
+        if brygady_new:
+            st.session_state.brygady = brygady_new
+        ensure_brygady_in_state(st.session_state.brygady)
+        save_state_to_json()
+        st.success("✅ Konfiguracja zapisana.")
+        st.experimental_rerun()
 
     st.markdown("---")
     st.write("Godziny pracy (możesz edytować każdą brygadę)")
