@@ -559,14 +559,6 @@ with st.sidebar:
         st.session_state.working_hours[b] = (start_t, end_t)
 
     st.markdown("---")
-    st.write("Godziny pracy (możesz edytować każdą brygadę)")
-    for i, b in enumerate(st.session_state.brygady):
-        # stable keys so widgets don't lose state when name changes
-        start_t = st.time_input(f"Start {b}", value=st.session_state.working_hours[b][0], key=brygada_key(i, "start"))
-        end_t = st.time_input(f"Koniec {b}", value=st.session_state.working_hours[b][1], key=brygada_key(i, "end"))
-        st.session_state.working_hours[b] = (start_t, end_t)
-
-    st.markdown("---")
     if st.button("🗑️ Wyczyść harmonogram"):
         st.session_state.schedules = {b: {} for b in st.session_state.brygady}
         st.session_state.clients_added = []
