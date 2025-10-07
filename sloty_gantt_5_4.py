@@ -641,6 +641,15 @@ available_slots = get_available_slots_for_day(booking_day, slot_minutes)
 if not available_slots:
     st.info("Brak dostępnych slotów dla wybranego dnia.")
 else:
+    # Dodaj CSS dla zielonych przycisków (białe litery)
+    st.markdown("""
+    <style>
+    div.stButton > button:first-child {
+        background-color: #28a745;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     for i, s in enumerate(available_slots):
         # Zmiana: 4 kolumny - Godzina, Brygady, Start/Koniec, Przycisk
         col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
