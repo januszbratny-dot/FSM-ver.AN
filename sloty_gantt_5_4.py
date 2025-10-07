@@ -167,7 +167,7 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
 if "slot_types" not in st.session_state:
     if not load_state_from_json():
         st.session_state.slot_types = [
-            {"name": "Standard", "minutes": 60, "weight": 1.0}
+            {"name": "Zleceni krótkie", "minutes": 30, "weight": 1.0}, "name": "Zleceni normalne", "minutes": 60, "weight": 1.0}
         ]
         st.session_state.brygady = ["Brygada 1", "Brygada 2"]
         st.session_state.working_hours = {}
