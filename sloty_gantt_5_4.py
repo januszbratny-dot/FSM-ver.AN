@@ -645,7 +645,7 @@ else:
     st.markdown("""
     <style>
     div.stButton > button:first-child {
-        background-color: #grey;
+        background-color: grey;
         color: white;
     }
     </style>
