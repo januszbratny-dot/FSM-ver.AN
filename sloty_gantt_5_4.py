@@ -597,7 +597,7 @@ week_ref = date.today() + timedelta(weeks=st.session_state.week_offset)
 week_days = get_week_days(week_ref)
 st.sidebar.write(f"Tydzień: {week_days[0].strftime('%d-%m-%Y')} – {week_days[-1].strftime('%d-%m-%Y')}")
 
-# ---------------------- Dodaj klienta (zmieniony UI: wybór dostępnego slotu) ----------------------
+# ---------------------- Dodaj klienta (Rezerwacja terminu) ----------------------
 st.subheader("➕ Rezerwacja terminu")
 
 # Imię klienta
@@ -605,7 +605,7 @@ with st.container():
     default_client = f"Klient {st.session_state.client_counter}"
     client_name = st.text_input("Nazwa klienta", value=default_client)
 
-# Wybór typu slotu (pozostawiamy)
+# Wybór typu slotu
 slot_names = [s["name"] for s in st.session_state.slot_types]
 if not slot_names:
     slot_names = ["Standard"]
@@ -616,7 +616,7 @@ slot_type_name = st.selectbox("Typ slotu", slot_names, index=idx)
 slot_type = next((s for s in st.session_state.slot_types if s["name"] == slot_type_name), slot_names[0])
 slot_duration = timedelta(minutes=slot_type["minutes"])
 
-# Navigator dni dla rezerwacji (pojedynczy dzień, z możliwością przejścia)
+# Navigator dni dla rezerwacji
 if "booking_day" not in st.session_state:
     st.session_state.booking_day = date.today()
 
@@ -628,7 +628,13 @@ with col_next:
     if st.button("Następny dzień ➡️", key="booking_next"):
         st.session_state.booking_day += timedelta(days=1)
 with col_mid:
-    st.markdown(f"### {st.session_state.booking_day.strftime('%A, %d %B %Y')}")
+    # Polskie dni tygodnia i miesiące
+    dni_tyg = ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"]
+    miesiace = ["Stycznia","Lutego","Marca","Kwietnia","Maja","Czerwca",
+                "Lipca","Sierpnia","Września","Października","Listopada","Grudnia"]
+    dzien = dni_tyg[st.session_state.booking_day.weekday()]
+    miesiac = miesiace[st.session_state.booking_day.month - 1]
+    st.markdown(f"### {dzien}, {st.session_state.booking_day.day} {miesiac} {st.session_state.booking_day.year}")
 
 booking_day = st.session_state.booking_day
 
