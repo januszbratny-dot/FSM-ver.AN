@@ -655,7 +655,7 @@ else:
         col3.write(f"⏱️ Start: {s['start'].strftime('%Y-%m-%d %H:%M')}\nKoniec: {s['end'].strftime('%Y-%m-%d %H:%M')}")
 
         # Przycisk rezerwacji slotu
-        if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
+        if col4.button(f"Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
