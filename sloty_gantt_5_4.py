@@ -782,7 +782,7 @@ if not df.empty:
         cols = st.columns([1.2, 2, 1.2, 2, 1])
         cols[0].write(row["Dzień"])
         cols[1].write(f"**{row['Klient']}** — {row['Typ']}")
-        cols[2].write(f"{row['Start'].strftime('%H:%M')} - {row['Koniec'].strftime('%H:%M')}")
+        cols[2].write(f"{row['Start prac'].strftime('%H:%M')} - {row['Koniec prac'].strftime('%H:%M')}")
         cols[3].write(row["Przedział przyjazdu"] if row["Przedział przyjazdu"] else "-")
         if cols[4].button("Usuń", key=f"del_{row['Brygada']}_{row['_id']}"):
             delete_slot(row["Brygada"], row["Dzień"], row["_id"])
