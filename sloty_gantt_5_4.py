@@ -642,17 +642,20 @@ if not available_slots:
     st.info("Brak dostępnych slotów dla wybranego dnia.")
 else:
     for i, s in enumerate(available_slots):
-        # Zmiana: tylko 3 kolumny zamiast 4
-        col1, col2, col3 = st.columns([2, 2, 1])
+        # Zmiana: 4 kolumny - Godzina, Brygady, Start/Koniec, Przycisk
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
 
-        # Wyświetl godzinę slotu
+        # Wyświetl godzinę slotu (tylko godziny)
         col1.write(f"🚗 Przedział przyjazdu: {s['start'].strftime('%H:%M')} – {s['end'].strftime('%H:%M')}")
 
         # Wyświetl dostępne brygady
         col2.write(f"👷 Brygady: {', '.join(s['brygady'])}")
 
+        # Kolumna Start i Koniec (pełna data + godzina)
+        col3.write(f"⏱️ Start: {s['start'].strftime('%Y-%m-%d %H:%M')}\nKoniec: {s['end'].strftime('%Y-%m-%d %H:%M')}")
+
         # Przycisk rezerwacji slotu
-        if col3.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
+        if col4.button("Zarezerwuj w tym slocie", key=f"book_{i}"):
             brygada = s['brygady'][0]  # wybieramy pierwszą dostępną brygadę
             slot = {
                 "start": s["start"],
@@ -665,6 +668,7 @@ else:
             st.session_state.client_counter += 1
             st.success(f"✅ Zarezerwowano slot {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} w brygadzie {brygada}.")
             st.rerun()
+
 
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
