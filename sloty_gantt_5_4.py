@@ -681,7 +681,7 @@ else:
 
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
-st.subheader("⚡ Automatyczne dociążenie wszystkich brygad")
+st.subheader("⚡ Automatyczne dociążenie wszystkich brygad (przyspieszonie testowania)")
 
 # wybór dnia do autofill
 day_autofill = st.date_input(
