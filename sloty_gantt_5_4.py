@@ -8,7 +8,7 @@ import tempfile
 import logging
 import uuid
 from datetime import datetime, timedelta, date, time
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Dict, Tuple, Optional
 
 # ---------------------- CONFIG ----------------------
@@ -52,15 +52,13 @@ def parse_datetime_iso(s: Optional[str]) -> Optional[datetime]:
     """Parse ISO datetimes; support trailing 'Z' by converting to +00:00."""
     if s is None:
         return None
-    if isinstance(s, str) and s.endswith("Z"):
+    if s.endswith("Z"):
         s = s[:-1] + "+00:00"
     return datetime.fromisoformat(s)
 
 
 def parse_time_str(t: str) -> time:
     """Robust parsing for time strings (H:M, H:M:S, H:M:S.sss)."""
-    if t is None:
-        raise ValueError("parse_time_str: received None")
     try:
         # Prefer time.fromisoformat if available
         return time.fromisoformat(t)
@@ -136,10 +134,7 @@ def load_state_from_json(filename: str = STORAGE_FILENAME) -> bool:
 
     st.session_state.working_hours = {}
     for b, wh in data.get("working_hours", {}).items():
-        try:
-            st.session_state.working_hours[b] = (parse_time_str(wh[0]), parse_time_str(wh[1]))
-        except Exception:
-            st.session_state.working_hours[b] = (DEFAULT_WORK_START, DEFAULT_WORK_END)
+        st.session_state.working_hours[b] = (parse_time_str(wh[0]), parse_time_str(wh[1]))
 
     st.session_state.schedules = {}
     for b, days in data.get("schedules", {}).items():
@@ -194,8 +189,6 @@ def ensure_brygady_in_state(brygady_list: List[str]):
             st.session_state.working_hours[b] = (DEFAULT_WORK_START, DEFAULT_WORK_END)
         if b not in st.session_state.schedules:
             st.session_state.schedules[b] = {}
-
-ensure_brygady_in_state(st.session_state.brygady)
 
 # ---------------------- PARSERS & VALIDATION ----------------------
 
@@ -540,46 +533,22 @@ def get_available_slots_for_day(day: date, slot_minutes: int, step_minutes: int 
 st.set_page_config(page_title="Harmonogram slotów", layout="wide")
 st.title("📅 Harmonogram slotów - Tydzień")
 
-# ---------------------- SIDEBAR: Konfiguracja (formularz) ----------------------
 with st.sidebar:
     st.subheader("⚙️ Konfiguracja")
 
-    with st.form("config_form"):
-        st.markdown("**Typy slotów (format: Nazwa, minuty, waga)**")
-        default_slot_types_text = "\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types)
-        slot_types_input = st.text_area(" ", value=default_slot_types_text, key="slot_types_input", height=120)
+    # slot types editor with validation
+    txt = st.text_area("Typy slotów (format: Nazwa, minuty, waga)",
+                       value="\n".join(f"{s['name']},{s['minutes']},{s.get('weight',1)}" for s in st.session_state.slot_types))
+    parsed = parse_slot_types(txt)
+    if parsed:
+        st.session_state.slot_types = parsed
 
-        st.markdown("**Lista brygad**")
-        default_brygady_text = "\n".join(st.session_state.brygady)
-        brygady_input = st.text_area(" ", value=default_brygady_text, key="brygady_input", height=80)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            submitted = st.form_submit_button("💾 Zapisz konfigurację")
-        with col_b:
-            reset_default = st.form_submit_button("♻️ Przywróć ustawienia domyślne")
-
-    if submitted:
-        parsed = parse_slot_types(slot_types_input)
-        if parsed:
-            st.session_state.slot_types = parsed
-        brygady_new = [line.strip() for line in brygady_input.splitlines() if line.strip()]
-        if brygady_new:
-            st.session_state.brygady = brygady_new
-        ensure_brygady_in_state(st.session_state.brygady)
-        save_state_to_json()
-        st.success("✅ Konfiguracja zapisana.")
-        st.experimental_rerun()
-
-    if reset_default:
-        st.session_state.slot_types = [{"name": "Standard", "minutes": 60, "weight": 1.0}]
-        st.session_state.brygady = ["Brygada 1", "Brygada 2"]
-        st.session_state.working_hours = {}
-        st.session_state.schedules = {}
-        ensure_brygady_in_state(st.session_state.brygady)
-        save_state_to_json()
-        st.success("♻️ Przywrócono ustawienia domyślne.")
-        st.experimental_rerun()
+    # brygady editor
+    txt_b = st.text_area("Lista brygad", value="\n".join(st.session_state.brygady))
+    brygady_new = [line.strip() for line in txt_b.splitlines() if line.strip()]
+    if brygady_new and brygady_new != st.session_state.brygady:
+        st.session_state.brygady = brygady_new
+    ensure_brygady_in_state(st.session_state.brygady)
 
     st.markdown("---")
     st.write("Godziny pracy (możesz edytować każdą brygadę)")
@@ -602,10 +571,10 @@ with st.sidebar:
     st.subheader("🕓 Czas rezerwowy (przyjazd Brygady)")
     st.write("Ustaw w minutach: przed i po czasie rozpoczęcia slotu.")
     st.session_state.czas_rezerwowy_przed = st.number_input(
-        "Czas rezerwowy przed (minuty)", min_value=0, max_value=180, value=int(st.session_state.get("czas_rezerwowy_przed", 90)), step=5, key="czas_przed"
+        "Czas rezerwowy przed (minuty)", min_value=0, max_value=180, value=90, step=5, key="czas_przed"
     )
     st.session_state.czas_rezerwowy_po = st.number_input(
-        "Czas rezerwowy po (minuty)", min_value=0, max_value=180, value=int(st.session_state.get("czas_rezerwowy_po", 90)), step=5, key="czas_po"
+        "Czas rezerwowy po (minuty)", min_value=0, max_value=180, value=90, step=5, key="czas_po"
     )
 
 # week navigation
@@ -696,7 +665,7 @@ else:
             add_slot_to_brygada(brygada, booking_day, slot)
             st.session_state.client_counter += 1
             st.success(f"✅ Zarezerwowano slot {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} w brygadzie {brygada}.")
-            st.experimental_rerun()
+            st.rerun()
 
 
 # ---------------------- AUTO-FILL FULL DAY (BEZPIECZNY) ----------------------
@@ -779,7 +748,7 @@ if st.session_state.get("autofill_done"):
         st.info("ℹ️ Wszystkie brygady są już w pełni obciążone w tym dniu.")
 
     # BEZPIECZNE wywołanie rerun po zakończeniu renderu
-    st.experimental_rerun()
+    st.rerun()
 
 # ---------------------- Harmonogram (tabela) ----------------------
 all_slots = []
@@ -818,7 +787,7 @@ if not df.empty:
         cols[3].write(row["Przedział przyjazdu"] if row["Przedział przyjazdu"] else "-")
         if cols[4].button("Usuń", key=f"del_{row['Brygada']}_{row['_id']}"):
             delete_slot(row["Brygada"], row["Dzień"], row["_id"])
-            st.experimental_rerun()
+            st.rerun()
 
 # ---------------------- GANTT ----------------------
 if not df.empty:
@@ -836,8 +805,8 @@ if not df.empty:
 
 # ---------------------- PODSUMOWANIE ----------------------
 st.subheader("📌 Podsumowanie")
-st.write(f"✅ Dodano klientów: {len(st.session_state.get('clients_added', []))}")
-st.write(f"❌ Brak slotu dla: {st.session_state.get('not_found_counter', 0)}")
+st.write(f"✅ Dodano klientów: {len(st.session_state.clients_added)}")
+st.write(f"❌ Brak slotu dla: {st.session_state.not_found_counter}")
 
 # ---------------------- UTILIZATION PER DAY ----------------------
 st.subheader("📊 Wykorzystanie brygad w podziale na dni (%)")
